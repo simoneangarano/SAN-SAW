@@ -30,5 +30,10 @@ def get_model(args):
                             pretrained=args.imagenet_pretrained)
         params = model.optim_parameters(args)
         args.numpy_transform = True
+        
+    elif args.backbone == "LRASPP":
+        model = lraspp_mobilenet_v3_large(args=args, num_classes=args.num_classes)
+        params = model.optim_parameters(args)
+        args.numpy_transform = True
 
     return model, params

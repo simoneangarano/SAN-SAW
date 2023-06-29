@@ -267,7 +267,7 @@ class ResNetMulti(nn.Module):
                 {'params': self.get_10x_lr_params(), 'lr': 10 * args.lr}]
 
 
-def Res50_ClassINW(args,num_classes=21, pretrained=True):
+def Res50_ClassINW(args, num_classes=21, pretrained=True):
     model = ResNetMulti(args, Bottleneck, [3, 4, 6, 3], num_classes)
 
     if pretrained:

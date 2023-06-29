@@ -9,8 +9,6 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from math import ceil
 import numpy as np
-from distutils.version import LooseVersion
-from tensorboardX import SummaryWriter
 from torchvision.utils import make_grid
 import warnings
 import sys
@@ -22,6 +20,7 @@ from utils.train_helper import get_model
 from datasets.cityscapes_Dataset import City_Dataset, City_DataLoader, inv_preprocess, decode_labels
 from datasets.gta5_Dataset import GTA5_DataLoader, GTA5_xuanran_DataLoader, Mix_DataLoader
 from datasets.synthia_Dataset import SYNTHIA_DataLoader
+from datasets.agriseg import AgriSeg_DataLoader
 
 datasets_path = {
     'cityscapes': {'data_root_path': '../../DATASETS/datasets_original/Cityscapes', 'list_path': '../datasets/city_list',
@@ -34,6 +33,7 @@ datasets_path = {
                 'image_path': './datasets/SYNTHIA/RGB',
                 'gt_path': './datasets/SYNTHIA/GT/LABELS'},
     'NTHU': {'data_root_path': './datasets/NTHU_Datasets', 'list_path': './datasets/NTHU_list'}
+    'AgriSeg': {'data_root_path': '../AgriSeg/datasets/', 'list_path': ''}
 }
 
 
@@ -92,7 +92,6 @@ device_ids = [0]
 class Trainer():
     def __init__(self, args, cuda=None, train_id="None", logger=None):
         self.args = args
-        ITER_MAX = args.each_epoch_iters
         self.device = torch.device('cuda:{}'.format(device_ids[0]))
         # os.environ["CUDA_VISIBLE_DEVICES"] = self.args.gpu
         os.environ["CUDA_VISIBLE_DEVICES"] = "2"
@@ -107,9 +106,6 @@ class Trainer():
         self.current_epoch = 0
         self.current_iter = 0
         self.second_best_MIou = 0
-
-        # set TensorboardX
-        self.writer = SummaryWriter(self.args.checkpoint_dir)
 
         # Metric definition
         self.Eval = Eval(self.args.num_classes)
@@ -154,13 +150,15 @@ class Trainer():
 
         elif self.args.optim == "Adam":
             self.optimizer = torch.optim.Adam(params, betas=(0.9, 0.99), weight_decay=self.args.weight_decay)
+            
         # dataloader
         if self.args.dataset == "cityscapes":
             self.dataloader = City_DataLoader(self.args)
         elif self.args.dataset == "gta5":
             self.dataloader = GTA5_DataLoader(self.args)
         else:
-            self.dataloader = SYNTHIA_DataLoader(self.args)
+            self.dataloader = AgriSeg_DataLoader(self.args)
+            
         if self.args.val_dataset == "cityscapes":
             self.test_dataloader = City_DataLoader(self.args)
         else:
@@ -725,11 +723,11 @@ class Trainer():
 
 def add_train_args(arg_parser):
     # Path related arguments
-    arg_parser.add_argument('--data_root_path', type=str, default='../../DATASETS/datasets_seg/GTA5',
+    arg_parser.add_argument('--data_root_path', type=str, default='../AgriSeg/datasets/',
                             help="the root path of dataset")
-    arg_parser.add_argument('--list_path', type=str, default='../datasets/GTA_640/list',
+    arg_parser.add_argument('--list_path', type=str, default='',
                             help="the root path of dataset")
-    arg_parser.add_argument('--checkpoint_dir', default="./log/gta5_pretrain_2",
+    arg_parser.add_argument('--checkpoint_dir', default="./logs/",
                             help="the path of ckpt file")
     arg_parser.add_argument('--xuanran_path', default=None,
                             help="the path of ckpt file")
@@ -739,7 +737,7 @@ def add_train_args(arg_parser):
                             help="if use weight loss")
     arg_parser.add_argument('--use_trained', default=False,
                             help="if use trained model")
-    arg_parser.add_argument('--backbone', default='Deeplab50_CLASS_INW',
+    arg_parser.add_argument('--backbone', default='LRASPP',
                             help="backbone of encoder")
     arg_parser.add_argument('--bn_momentum', type=float, default=0.1,
                             help="batch normalization momentum")
@@ -757,27 +755,27 @@ def add_train_args(arg_parser):
                             help='random seed')
     arg_parser.add_argument('--gpu', type=str, default="0",
                             help=" the num of gpu")
-    arg_parser.add_argument('--batch_size_per_gpu', default=2, type=int,
+    arg_parser.add_argument('--batch_size_per_gpu', default=8, type=int,
                             help='input batch size')
     arg_parser.add_argument('--alpha', default=0.3, type=int,
                             help='input mix alpha')
 
     # dataset related arguments
-    arg_parser.add_argument('--dataset', default='gta5', type=str,
+    arg_parser.add_argument('--dataset', default='vineyard', type=str,
                             help='dataset choice')
-    arg_parser.add_argument('--val_dataset', type=str, default='cityscapes',
+    arg_parser.add_argument('--val_dataset', type=str, default='pear',
                         help='a list consists of cityscapes, mapillary, gtav, bdd100k, synthia')
-    arg_parser.add_argument('--base_size', default="640,640", type=str,
+    arg_parser.add_argument('--base_size', default="244,244", type=str,
                             help='crop size of image')
-    arg_parser.add_argument('--crop_size', default="640,640", type=str,
+    arg_parser.add_argument('--crop_size', default="244,244", type=str,
                             help='base size of image')
-    arg_parser.add_argument('--target_base_size', default="1024,512", type=str,
+    arg_parser.add_argument('--target_base_size', default="", type=str,
                             help='crop size of target image')
-    arg_parser.add_argument('--target_crop_size', default="1024,512", type=str,
+    arg_parser.add_argument('--target_crop_size', default="", type=str,
                             help='base size of target image')
-    arg_parser.add_argument('--num_classes', default=19, type=int,
+    arg_parser.add_argument('--num_classes', default=1, type=int,
                             help='num class of mask')
-    arg_parser.add_argument('--data_loader_workers', default=1, type=int,
+    arg_parser.add_argument('--data_loader_workers', default=24, type=int,
                             help='num_workers of Dataloader')
     arg_parser.add_argument('--pin_memory', default=2, type=int,
                             help='pin_memory of Dataloader')
@@ -815,7 +813,7 @@ def add_train_args(arg_parser):
                             help="the path of ckpt file")
     arg_parser.add_argument('--poly_power', type=float, default=0.9,
                             help="poly_power")
-    arg_parser.add_argument('--selected_classes', default=[0,10,2,1,8],
+    arg_parser.add_argument('--selected_classes', default=[0],
                             help="poly_power")
 
     # multi-level output
@@ -842,16 +840,6 @@ def init_args(args):
     else:
         args.crop_size = (int(crop_size[0]), int(crop_size[1]))
         args.base_size = (int(base_size[0]), int(base_size[1]))
-
-
-    target_crop_size = args.target_crop_size.split(',')
-    target_base_size = args.target_base_size.split(',')
-    if len(target_crop_size) == 1:
-        args.target_crop_size = int(target_crop_size[0])
-        args.target_base_size = int(target_base_size[0])
-    else:
-        args.target_crop_size = (int(target_crop_size[0]), int(target_crop_size[1]))
-        args.target_base_size = (int(target_base_size[0]), int(target_base_size[1]))
 
     # if not args.continue_training:
     #     if os.path.exists(args.checkpoint_dir):
@@ -891,7 +879,6 @@ def init_args(args):
 
 if __name__ == '__main__':
     print(torch.cuda.is_available())
-    assert LooseVersion(torch.__version__) >= LooseVersion('1.0.0'), 'PyTorch>=1.0.0 is required'
     warnings.filterwarnings('ignore')
     arg_parser = argparse.ArgumentParser()
     arg_parser = add_train_args(arg_parser)
